@@ -1,0 +1,114 @@
+{
+  "name": "🧩 [SUBWF] Postar em X (Payload+ v2)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0a003df2-8cd1-44fa-ad3d-6b04753fcc1d",
+      "name": "Start (Execute Workflow)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        688,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Entrada: item vindo do Orchestrator\nconst i = $json;\n\n// ---- Parse arquivos (jsonb -> array de {url, type?}) ----\nlet arquivos = i.arquivos;\nif (typeof arquivos === 'string') {\n  try { arquivos = JSON.parse(arquivos); } catch(e) {}\n}\narquivos = Array.isArray(arquivos) ? arquivos : [];\n\nconst urls = arquivos.map(a => a?.url).filter(Boolean);\nconst firstUrl = urls[0] || '';\n\n// ---- Normaliza mídia/tipo ----\nconst midiaTipo = String(i.midia_tipo || '').toLowerCase();     // video | imagem\nconst postTipo  = String(i.post_tipo  || '').toLowerCase();     // unica | carrossel\nconst isVideo   = midiaTipo === 'video';\nconst isImage   = midiaTipo === 'imagem';\nconst isCarousel = postTipo === 'carrossel' || urls.length > 1;\n\n// ---- Textos ----\nconst txt = {\n  ig_fb: i.texto_instagram_facebook || '',\n  youtube: i.texto_youtube || '',\n  x_threads_tiktok: i.texto_x_threads_tiktok || '',\n  linkedin: i.texto_linkedin || '',\n};\n\n// Shorts (YouTube): garante #shorts se for vídeo e não existir\nlet youtubeText = txt.youtube;\nconst isShorts = (i.platform === 'youtube' && isVideo);\nif (isShorts && !/\\#shorts\\b/i.test(youtubeText)) {\n  youtubeText = (youtubeText + '\\n\\n#shorts').trim();\n}\n\n// Helpers: título/descrição (heurística simples)\nconst firstLine = (s) => (String(s||'').split(/\\r?\\n/)[0] || '').trim();\nconst clip = (s, n) => String(s||'').slice(0, n);\n\n// ---- Payload padronizado (SaaS-grade) ----\nconst payload = {\n  meta: {\n    post_id: i.post_id,\n    platform: i.platform,\n    idempotency_key: i.idempotency_key,\n    created_at: i.created_at || null,\n  },\n  media: {\n    type: isVideo ? 'video' : 'image',\n    post_type: isCarousel ? 'carousel' : 'single',\n    urls,\n    first_url: firstUrl,\n    count: urls.length,\n  },\n  content: {\n    // Campos genéricos para qualquer node\n    caption: (i.platform === 'instagram' || i.platform === 'facebook') ? txt.ig_fb : (\n      i.platform === 'linkedin' ? txt.linkedin : txt.x_threads_tiktok\n    ),\n    title: i.platform === 'youtube' ? firstLine(youtubeText) : firstLine(txt.ig_fb),\n    description: i.platform === 'youtube' ? youtubeText : (\n      i.platform === 'tiktok' ? txt.x_threads_tiktok : ''\n    ),\n    hashtags: (i.platform === 'youtube') ? ['shorts'] : [],\n    raw: {\n      ig_fb: txt.ig_fb,\n      youtube: youtubeText,\n      x_threads_tiktok: txt.x_threads_tiktok,\n      linkedin: txt.linkedin,\n    },\n  },\n  platform_config: {\n    instagram: {\n      mediaType: isVideo ? 'REELS' : 'POST',\n      isCarousel,\n    },\n    facebook: {\n      isCarousel,\n    },\n    youtube: {\n      isShorts,\n      categoryId: '27',\n      tags: ['inteligenciaartificial','chatgpt','ia','shorts'].filter(Boolean),\n    },\n    x: {\n      maxLength: 280,\n    },\n    tiktok: {\n      title: clip(firstLine(txt.x_threads_tiktok), 150),\n      description: txt.x_threads_tiktok,\n    },\n    linkedin: {\n      visibility: 'PUBLIC',\n    },\n    threads: {},\n  },\n};\n\n// ---- Saídas legadas (pra facilitar mapear nos seus nodes atuais) ----\nreturn {\n  json: {\n    ...i,\n    arquivos,\n    mediaUrl: firstUrl,\n    mediaUrls: urls,\n    isVideo,\n    isCarousel,\n    youtubeText,\n    payload\n  }\n};\n"
+      },
+      "id": "90d2a15a-22b7-4612-b71b-d0037e2532ca",
+      "name": "Preparar Payload (PADRÃO)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c5d37e3d-4d7a-4de6-b292-d70f0850a538",
+      "name": "Retorna Sucesso",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        1552,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "user": "fashion",
+        "platform": [
+          "x"
+        ],
+        "title": "={{ $json.payload.content.description }}",
+        "photos": "={{ $json.payload.media.first_url }}"
+      },
+      "type": "n8n-nodes-upload-post.uploadPost",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        -272
+      ],
+      "id": "253726e4-c8cd-43f5-829a-1c206da877df",
+      "name": "Upload photos",
+      "credentials": {
+        "uploadPostApi": {
+          "id": "XjooUvfeEsC4o6pe",
+          "name": "Upload Post account - Fashion"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start (Execute Workflow)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Payload (PADRÃO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Payload (PADRÃO)": {
+      "main": [
+        [
+          {
+            "node": "Upload photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload photos": {
+      "main": [
+        [
+          {
+            "node": "Retorna Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "04fab9b4-5af9-4491-983f-17201613fd61",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "66708615cabf00b4149f3d6f755fe4e0ded087cad3601101c7813b93766ebcd6"
+  },
+  "id": "qcjl4mpY4zEucdG5ksVOR",
+  "tags": []
+}

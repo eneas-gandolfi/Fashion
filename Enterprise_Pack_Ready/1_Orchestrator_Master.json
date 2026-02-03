@@ -1,0 +1,755 @@
+{
+  "name": "⭐️ [ORCHESTRATOR] Postagem Automática - Enterprise (Sub-workflows por Plataforma) (Supabase Adapted)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "1612ffd7-c73d-41c6-81f4-503b476b5ec8",
+      "name": "Agendamento (30min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -12256,
+        10992
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.posts WHERE postado_em_todas = false ORDER BY created_at ASC;",
+        "options": {}
+      },
+      "id": "a3e479e6-78b2-4586-9828-1b466f96c260",
+      "name": "Buscar Posts Pendentes (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [
+        -12016,
+        10992
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zkfuFOWzek83XLiq",
+          "name": "Fashion - Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ffd5b99e-bcaf-4408-82f7-addd87d3ada1",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -11776,
+        10992
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Recebe 1 post (linha do Supabase) e transforma em N itens (1 por plataforma selecionada)\nconst post = $json;\n\n// Lógica Híbrida: Se tiver coluna 'plataformas', usa. Se não, infere do 'status_detalhado'.\nlet plataformasRaw = post.plataformas;\n\nif (!Array.isArray(plataformasRaw)) {\n  const allPlatforms = ['instagram', 'facebook', 'youtube', 'x', 'tiktok', 'linkedin', 'threads', 'pinterest'];\n  const status = post.status_detalhado || {};\n  // Se status NÃO for 'true', significa que está pendente ou foi selecionado (pois o frontend marca os não-selecionados como 'true')\n  plataformasRaw = allPlatforms.filter(p => status[p] !== 'true');\n}\n\nconst plataformas = Array.isArray(plataformasRaw)\n  ? plataformasRaw.map(p => String(p).toLowerCase()).filter(Boolean)\n  : [];\n\n// Normaliza status_detalhado (pode vir null)\nconst status = post.status_detalhado ?? {};\n\n// Helper: ainda não postou nessa plataforma?\nconst notPosted = (key) => status?.[key] !== 'true';\n\n// Cria lista final de plataformas que DEVEM ser postadas agora (selecionada && pendente)\nconst toPost = [];\nfor (const p of plataformas) {\n  const key = (p === 'x') ? 'x' : p;\n  if (notPosted(key)) toPost.push(p);\n}\n\n// Se nada a fazer, não retorna item (evita desperdício)\nif (toPost.length === 0) return [];\n\nreturn toPost.map((platform) => ({\n  json: {\n    platform,\n    post_id: post.id,\n    midia_tipo: post.midia_tipo,\n    post_tipo: post.post_tipo,\n    // Garante Textos\n    texto_instagram_facebook: post.texto_instagram_facebook ?? '',\n    texto_youtube: post.texto_youtube ?? '',\n    texto_x_threads_tiktok: post.texto_x_threads_tiktok ?? '',\n    texto_linkedin: post.texto_linkedin ?? '',\n    // Garante Arquivos\n    arquivos: typeof post.arquivos === 'string' ? JSON.parse(post.arquivos) : post.arquivos,\n    \n    status_detalhado: status,\n    // Regras SaaS: idempotência (chave determinística por post+plataforma)\n    idempotency_key: `${post.id}:${platform}`,\n    \n    // Passar Tokens se necessário (o Switch original passava Token-instagram, etc. Se os sub-workflows precisarem, tem que vir do banco ou credenciais)\n  }\n}));\n"
+      },
+      "id": "c9eca272-f222-498a-8e43-f12e90c2f05c",
+      "name": "Normalize + Expande Plataformas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -11520,
+        10976
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "78a2ee8d-0d26-47c9-9a06-86391a8de2bf"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "instagram"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b9e81c67-ff9d-4174-a416-0673a33f4693",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "Story - Insta",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Story - Insta"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "facebook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "6f496862-7801-4033-8bb1-49beb6d844ce"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "facebook"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "youtube",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "131432e0-bf93-4a1d-8f8d-caca16e9e845"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "youtube"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "x",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "4395a4f5-2067-4a5e-b0a9-c7e293a14c66"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "x"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "tiktok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "6dedc958-b3e8-4d45-b6d0-4416a8f86138"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tiktok"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "12debb2f-0369-43d7-ba75-39fce1fe838e",
+      "name": "Router por Plataforma",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -11264,
+        10928
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.posts\nSET status_detalhado =\n  jsonb_set(\n    COALESCE(status_detalhado, '{}'::jsonb),\n    ARRAY[CASE WHEN '{{ $json.platform }}' = 'x' THEN 'x' ELSE '{{ $json.platform }}' END],\n    '\"true\"'\n  )\nWHERE id = '{{ $json.post_id }}';\n",
+        "options": {}
+      },
+      "id": "13ee9436-52a9-4f16-ac16-60e27d9b016d",
+      "name": "Atualiza status_detalhado (plataforma)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [
+        -10336,
+        11008
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zkfuFOWzek83XLiq",
+          "name": "Fashion - Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  plataformas,\n  status_detalhado\nFROM public.posts\nWHERE id = '{{ $json.post_id }}';\n",
+        "options": {}
+      },
+      "id": "98439b30-7d0c-4969-b096-a92069eb65e3",
+      "name": "Checa se concluiu todas selecionadas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [
+        -10080,
+        10976
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zkfuFOWzek83XLiq",
+          "name": "Fashion - Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { const r = $json.results?.[0]; if(!r) return false; const plats = r.plataformas || []; const st = r.status_detalhado || {}; return plats.length>0 && plats.every(p => (st[p==='x'?'x':p] === 'true')); })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "049e54d2-918a-4aef-b3af-ffdcdae98ef4",
+      "name": "IF: pode finalizar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -9856,
+        10976
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.posts SET postado_em_todas = true WHERE id = '{{ $json.post_id }}';",
+        "options": {}
+      },
+      "id": "d530b5d6-6058-4363-a8db-97654d45a585",
+      "name": "Finalizar Post (postado_em_todas=true)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [
+        -9632,
+        10800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zkfuFOWzek83XLiq",
+          "name": "Fashion - Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "49cfecfe-79ad-4eea-a52f-ebb8cbafa5be",
+      "name": "Continuar Loop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -9392,
+        10992
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "HvrFpqibblpsqofpPsVEu",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/HvrFpqibblpsqofpPsVEu",
+          "cachedResultName": "🧩 [SUBWF] Postar em Instagram (Feed/Reels) (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10832,
+        10368
+      ],
+      "id": "4bbbcb55-6df5-48a9-a67d-19e40f2efda4",
+      "name": "Call '🧩 [SUBWF] Postar em Instagram (Feed/Reels) (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aUc1rCwIUs0wZu2k116jI",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aUc1rCwIUs0wZu2k116jI",
+          "cachedResultName": "🧩 [SUBWF] Postar em Facebook (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10832,
+        10752
+      ],
+      "id": "03be1ad8-c9f0-4ce0-847c-94e76e6f314c",
+      "name": "Call '🧩 [SUBWF] Postar em Facebook (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "yTObmaAsoIUBpXlSw5SSj",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/yTObmaAsoIUBpXlSw5SSj",
+          "cachedResultName": "🧩 [SUBWF] Postar Story Instagram (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10832,
+        10560
+      ],
+      "id": "df541585-b1de-43e7-a0d3-25a08916e441",
+      "name": "Call '🧩 [SUBWF] Postar Story Instagram (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "BsQgmbYCF-Wvqn1WYK7Hi",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/BsQgmbYCF-Wvqn1WYK7Hi",
+          "cachedResultName": "🧩 [SUBWF] Postar em YouTube (Shorts) (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10832,
+        11008
+      ],
+      "id": "1fa06b40-dfaa-4dca-84ba-f45acaa2cecd",
+      "name": "Call '🧩 [SUBWF] Postar em YouTube (Shorts) (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "qcjl4mpY4zEucdG5ksVOR",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/qcjl4mpY4zEucdG5ksVOR",
+          "cachedResultName": "🧩 [SUBWF] Postar em X (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10832,
+        11248
+      ],
+      "id": "69a6da8a-15cf-480f-abbf-abea63dee9ee",
+      "name": "Call '🧩 [SUBWF] Postar em X (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "HIFnaPJC-7nS-53LyxJWC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/HIFnaPJC-7nS-53LyxJWC",
+          "cachedResultName": "🧩 [SUBWF] Postar em TikTok (Payload+ v2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -10848,
+        11440
+      ],
+      "id": "4cacd382-0317-47af-981f-63ab8d1f83ac",
+      "name": "Call '🧩 [SUBWF] Postar em TikTok (Payload+ v2)'"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trigger-post",
+        "options": {}
+      },
+      "name": "Webhook (Post Now)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -12500,
+        10800
+      ],
+      "id": "webhook-trigger-ent"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agendamento (30min)": {
+      "main": [
+        [
+          {
+            "node": "Buscar Posts Pendentes (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Posts Pendentes (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Normalize + Expande Plataformas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize + Expande Plataformas": {
+      "main": [
+        [
+          {
+            "node": "Router por Plataforma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router por Plataforma": {
+      "main": [
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar em Instagram (Feed/Reels) (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar Story Instagram (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar em Facebook (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar em YouTube (Shorts) (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar em X (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call '🧩 [SUBWF] Postar em TikTok (Payload+ v2)'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualiza status_detalhado (plataforma)": {
+      "main": [
+        [
+          {
+            "node": "Checa se concluiu todas selecionadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checa se concluiu todas selecionadas": {
+      "main": [
+        [
+          {
+            "node": "IF: pode finalizar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: pode finalizar?": {
+      "main": [
+        [
+          {
+            "node": "Finalizar Post (postado_em_todas=true)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continuar Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalizar Post (postado_em_todas=true)": {
+      "main": [
+        [
+          {
+            "node": "Continuar Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar em Instagram (Feed/Reels) (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar em Facebook (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar Story Instagram (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar em YouTube (Shorts) (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar em X (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '🧩 [SUBWF] Postar em TikTok (Payload+ v2)'": {
+      "main": [
+        [
+          {
+            "node": "Atualiza status_detalhado (plataforma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Post Now)": {
+      "main": [
+        [
+          {
+            "node": "Buscar Posts Pendentes (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "5e0c8ba9-64b1-4aae-9510-712497ffdd40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "66708615cabf00b4149f3d6f755fe4e0ded087cad3601101c7813b93766ebcd6"
+  },
+  "id": "dS7lfuqY5uw6HKMpitfUC",
+  "tags": []
+}

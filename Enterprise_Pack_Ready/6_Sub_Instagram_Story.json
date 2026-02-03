@@ -1,0 +1,115 @@
+{
+  "name": "🧩 [SUBWF] Postar Story Instagram (Payload+ v2)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "40025e11-2748-4efd-b916-f8b219b08b72",
+      "name": "Start (Execute Workflow)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst i = $json;\n\nlet arquivos = i.arquivos;\nif (typeof arquivos === 'string') { try { arquivos = JSON.parse(arquivos); } catch(e) {} }\narquivos = Array.isArray(arquivos) ? arquivos : [];\n\nconst urls = arquivos.map(a => a?.url).filter(Boolean);\nconst firstUrl = urls[0] || '';\n\nconst midiaTipo = String(i.midia_tipo || '').toLowerCase();\nconst isVideo = midiaTipo === 'video';\n\nconst payload = {\n  meta: {\n    post_id: i.post_id,\n    platform: 'instagram_story',\n    idempotency_key: i.idempotency_key ? `${i.idempotency_key}:story` : `${i.post_id}:instagram_story`,\n  },\n  media: {\n    type: isVideo ? 'video' : 'image',\n    first_url: firstUrl,\n    urls,\n    count: urls.length,\n  },\n  content: {\n    // Story normalmente não usa caption, mas deixo disponível\n    caption: i.texto_instagram_facebook || '',\n  },\n  platform_config: {\n    instagram_story: {\n      media_type: 'STORIES',\n      isVideo,\n    }\n  }\n};\n\nreturn { json: { ...i, arquivos, mediaUrl: firstUrl, mediaUrls: urls, isVideo, payload } };\n"
+      },
+      "id": "6b7fc08a-af30-4404-9dc3-b66ac48572f0",
+      "name": "Preparar Story Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "uploadVideo",
+        "user": "SEU-Identificador",
+        "platform": [
+          "instagram"
+        ],
+        "title": "Story",
+        "video": "={{ $json.payload.media.first_url }}",
+        "instagramMediaType": "STORIES"
+      },
+      "id": "6da2c25a-1a71-4f76-8d16-3675f340d1f0",
+      "name": "Postar Story (Fixed)",
+      "type": "n8n-nodes-upload-post.uploadPost",
+      "typeVersion": 1,
+      "position": [
+        608,
+        0
+      ],
+      "credentials": {
+        "uploadPostApi": {
+          "id": "XjooUvfeEsC4o6pe",
+          "name": "Upload Post account - Fashion"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "2ec3a93a-c433-4649-9fed-ee6424b659bd",
+      "name": "Retorna Sucesso",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        864,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start (Execute Workflow)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Story Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Story Payload": {
+      "main": [
+        [
+          {
+            "node": "POSTAR STORY (instagram) - SUBSTITUA PELO SEU NODE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POSTAR STORY (instagram) - SUBSTITUA PELO SEU NODE": {
+      "main": [
+        [
+          {
+            "node": "Retorna Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "1bf0bc42-ba7a-4afe-a588-6ed93060183b",
+  "meta": {
+    "instanceId": "66708615cabf00b4149f3d6f755fe4e0ded087cad3601101c7813b93766ebcd6"
+  },
+  "id": "yTObmaAsoIUBpXlSw5SSj",
+  "tags": []
+}

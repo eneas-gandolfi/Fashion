@@ -1,0 +1,102 @@
+{
+  "name": "🧩 [SUBWF] Postar em Instagram (Feed/Reels) (Payload+ v2)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c5756feb-de93-48b8-b9c7-9a20e2a87e65",
+      "name": "Start (Execute Workflow)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        224,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Entrada: item vindo do Orchestrator\nconst i = $json;\n\n// ---- Parse arquivos (jsonb -> array de {url, type?}) ----\nlet arquivos = i.arquivos;\nif (typeof arquivos === 'string') {\n  try { arquivos = JSON.parse(arquivos); } catch(e) {}\n}\narquivos = Array.isArray(arquivos) ? arquivos : [];\n\nconst urls = arquivos.map(a => a?.url).filter(Boolean);\nconst firstUrl = urls[0] || '';\n\n// ---- Normaliza mídia/tipo ----\nconst midiaTipo = String(i.midia_tipo || '').toLowerCase();     // video | imagem\nconst postTipo  = String(i.post_tipo  || '').toLowerCase();     // unica | carrossel\nconst isVideo   = midiaTipo === 'video';\nconst isImage   = midiaTipo === 'imagem';\nconst isCarousel = postTipo === 'carrossel' || urls.length > 1;\n\n// ---- Textos ----\nconst txt = {\n  ig_fb: i.texto_instagram_facebook || '',\n  youtube: i.texto_youtube || '',\n  x_threads_tiktok: i.texto_x_threads_tiktok || '',\n  linkedin: i.texto_linkedin || '',\n};\n\n// Shorts (YouTube): garante #shorts se for vídeo e não existir\nlet youtubeText = txt.youtube;\nconst isShorts = (i.platform === 'youtube' && isVideo);\nif (isShorts && !/\\#shorts\\b/i.test(youtubeText)) {\n  youtubeText = (youtubeText + '\\n\\n#shorts').trim();\n}\n\n// Helpers: título/descrição (heurística simples)\nconst firstLine = (s) => (String(s||'').split(/\\r?\\n/)[0] || '').trim();\nconst clip = (s, n) => String(s||'').slice(0, n);\n\n// ---- Payload padronizado (SaaS-grade) ----\nconst payload = {\n  meta: {\n    post_id: i.post_id,\n    platform: i.platform,\n    idempotency_key: i.idempotency_key,\n    created_at: i.created_at || null,\n  },\n  media: {\n    type: isVideo ? 'video' : 'image',\n    post_type: isCarousel ? 'carousel' : 'single',\n    urls,\n    first_url: firstUrl,\n    count: urls.length,\n  },\n  content: {\n    // Campos genéricos para qualquer node\n    caption: (i.platform === 'instagram' || i.platform === 'facebook') ? txt.ig_fb : (\n      i.platform === 'linkedin' ? txt.linkedin : txt.x_threads_tiktok\n    ),\n    title: i.platform === 'youtube' ? firstLine(youtubeText) : firstLine(txt.ig_fb),\n    description: i.platform === 'youtube' ? youtubeText : (\n      i.platform === 'tiktok' ? txt.x_threads_tiktok : ''\n    ),\n    hashtags: (i.platform === 'youtube') ? ['shorts'] : [],\n    raw: {\n      ig_fb: txt.ig_fb,\n      youtube: youtubeText,\n      x_threads_tiktok: txt.x_threads_tiktok,\n      linkedin: txt.linkedin,\n    },\n  },\n  platform_config: {\n    instagram: {\n      mediaType: isVideo ? 'REELS' : 'POST',\n      isCarousel,\n    },\n    facebook: {\n      isCarousel,\n    },\n    youtube: {\n      isShorts,\n      categoryId: '27',\n      tags: ['inteligenciaartificial','chatgpt','ia','shorts'].filter(Boolean),\n    },\n    x: {\n      maxLength: 280,\n    },\n    tiktok: {\n      title: clip(firstLine(txt.x_threads_tiktok), 150),\n      description: txt.x_threads_tiktok,\n    },\n    linkedin: {\n      visibility: 'PUBLIC',\n    },\n    threads: {},\n  },\n};\n\n// ---- Saídas legadas (pra facilitar mapear nos seus nodes atuais) ----\nreturn {\n  json: {\n    ...i,\n    arquivos,\n    mediaUrl: firstUrl,\n    mediaUrls: urls,\n    isVideo,\n    isCarousel,\n    youtubeText,\n    payload\n  }\n};\n"
+      },
+      "id": "fcaffd9f-9141-434d-bb81-876981e6f9e7",
+      "name": "Preparar Payload (PADRÃO)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -144
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "908625c5-245a-4d32-bf4c-d7106ebe9eb4",
+      "name": "POSTAR (instagram) - SUBSTITUA PELO SEU NODE",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        832,
+        -144
+      ],
+      "notesInFlow": true,
+      "notes": "Substitua este nó pelo seu node real de postagem (instagram).\n\n✅ Campos recomendados para mapear:\n- $json.payload.media.first_url\n- $json.payload.media.urls (carrossel)\n- $json.payload.content.caption\n- $json.payload.content.title / description (YouTube)\n- $json.payload.platform_config.instagram\n\n⚠️ Idempotência (SaaS):\n- use $json.payload.meta.idempotency_key em logs/locks se necessário\n"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0edd15c6-b1b5-4ad2-b03d-7e9a4c17a0bf",
+      "name": "Retorna Sucesso",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        1088,
+        -144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start (Execute Workflow)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Payload (PADRÃO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Payload (PADRÃO)": {
+      "main": [
+        [
+          {
+            "node": "POSTAR (instagram) - SUBSTITUA PELO SEU NODE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POSTAR (instagram) - SUBSTITUA PELO SEU NODE": {
+      "main": [
+        [
+          {
+            "node": "Retorna Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e427598d-990c-43f4-a3f3-6657a812c635",
+  "meta": {
+    "instanceId": "66708615cabf00b4149f3d6f755fe4e0ded087cad3601101c7813b93766ebcd6"
+  },
+  "id": "HvrFpqibblpsqofpPsVEu",
+  "tags": []
+}

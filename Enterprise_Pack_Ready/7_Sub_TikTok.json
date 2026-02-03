@@ -1,0 +1,101 @@
+{
+  "name": "🧩 [SUBWF] Postar em TikTok (Payload+ v2)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-tiktok",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Placeholder TikTok Payload logic (Simplified)\nconst i = $json;\nreturn { json: { ...i, payload: { ...i, platform: 'tiktok' } } };"
+      },
+      "id": "code-tiktok",
+      "name": "Preparar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "uploadVideo",
+        "user": "SEU-Identificador",
+        "platform": [
+          "tiktok"
+        ],
+        "title": "={{ $json.texto_x_threads_tiktok || 'Video' }}",
+        "video": "={{ $json.arquivos[0].url }}"
+      },
+      "id": "upload-tiktok",
+      "name": "Postar TikTok",
+      "type": "n8n-nodes-upload-post.uploadPost",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "uploadPostApi": {
+          "id": "XjooUvfeEsC4o6pe",
+          "name": "Upload Post account - Fashion"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "success-tiktok",
+      "name": "Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        600,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Preparar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Payload": {
+      "main": [
+        [
+          {
+            "node": "Postar TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postar TikTok": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "id": "HIFnaPJC-7nS-53LyxJWC"
+}
