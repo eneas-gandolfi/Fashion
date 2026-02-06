@@ -1,0 +1,246 @@
+{
+    "name": "MONITOR_PROFILES_DAILY",
+    "nodes": [
+        {
+            "parameters": {
+                "triggerTimes": {
+                    "item": [
+                        {
+                            "mode": "everyDay",
+                            "hour": 7,
+                            "minute": 0
+                        }
+                    ]
+                }
+            },
+            "name": "Cron",
+            "type": "n8n-nodes-base.cron",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/pick_profiles_for_daily_monitoring",
+                "method": "POST",
+                "jsonParameters": true,
+                "options": {},
+                "bodyParametersJson": "{ \"p_platform\": \"instagram\", \"p_limit\": 10 }",
+                "headerParametersJson": "{ \"apikey\": \"{{$env.SUPABASE_SERVICE_ROLE_KEY}}\", \"Authorization\": \"Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}\", \"Content-Type\": \"application/json\" }"
+            },
+            "name": "Get Instagram Profiles",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 2,
+            "position": [
+                250,
+                -150
+            ]
+        },
+        {
+            "parameters": {
+                "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/pick_profiles_for_daily_monitoring",
+                "method": "POST",
+                "jsonParameters": true,
+                "options": {},
+                "bodyParametersJson": "{ \"p_platform\": \"tiktok\", \"p_limit\": 10 }",
+                "headerParametersJson": "{ \"apikey\": \"{{$env.SUPABASE_SERVICE_ROLE_KEY}}\", \"Authorization\": \"Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}\", \"Content-Type\": \"application/json\" }"
+            },
+            "name": "Get TikTok Profiles",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 2,
+            "position": [
+                250,
+                150
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "append"
+            },
+            "name": "Merge Profiles",
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 2,
+            "position": [
+                500,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "batchSize": 1
+            },
+            "name": "Split Profiles",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 1,
+            "position": [
+                750,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{$json.platform}}",
+                            "operation": "equals",
+                            "value2": "instagram"
+                        }
+                    ]
+                }
+            },
+            "name": "Is Instagram?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1000,
+                -120
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{$json.platform}}",
+                            "operation": "equals",
+                            "value2": "tiktok"
+                        }
+                    ]
+                }
+            },
+            "name": "Is TikTok?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1000,
+                120
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://api.apify.com/v2/acts/ACTOR_ID_INSTAGRAM/runs?token={{$env.APIFY_TOKEN}}",
+                "method": "POST",
+                "jsonParameters": true,
+                "bodyParametersJson": "{ \"directUrls\": [\"{{$json.url}}\"], \"resultsLimit\": 20 }"
+            },
+            "name": "Run Instagram Actor",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                -200
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://api.apify.com/v2/acts/ACTOR_ID_TIKTOK/runs?token={{$env.APIFY_TOKEN}}",
+                "method": "POST",
+                "jsonParameters": true,
+                "bodyParametersJson": "{ \"directUrls\": [\"{{$json.url}}\"], \"resultsLimit\": 20 }"
+            },
+            "name": "Run TikTok Actor",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                200
+            ]
+        }
+    ],
+    "connections": {
+        "Cron": {
+            "main": [
+                [
+                    {
+                        "node": "Get Instagram Profiles",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Get TikTok Profiles",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Instagram Profiles": {
+            "main": [
+                [
+                    {
+                        "node": "Merge Profiles",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get TikTok Profiles": {
+            "main": [
+                [
+                    {
+                        "node": "Merge Profiles",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Merge Profiles": {
+            "main": [
+                [
+                    {
+                        "node": "Split Profiles",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Profiles": {
+            "main": [
+                [
+                    {
+                        "node": "Is Instagram?",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Is TikTok?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is Instagram?": {
+            "main": [
+                [
+                    {
+                        "node": "Run Instagram Actor",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is TikTok?": {
+            "main": [
+                [
+                    {
+                        "node": "Run TikTok Actor",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    }
+}
